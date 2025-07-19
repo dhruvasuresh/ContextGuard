@@ -1,0 +1,24 @@
+# Node
+node_modules/
+npm-debug.log*
+.env
+.env.*
+
+# React
+frontend/build/
+frontend/node_modules/
+frontend/.env
+
+# Logs
+logs/
+*.log
+
+# Docker
+docker/*.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VSCode
+.vscode/
