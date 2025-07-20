@@ -13,6 +13,9 @@ app.use('/auth', authRoutes);
 const employeeRoutes = require('./routes/employees');
 app.use('/api/employees', employeeRoutes);
 
+const policyRoutes = require('./routes/policies');
+app.use('/api/policies', policyRoutes);
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Backend is running!' });
 });

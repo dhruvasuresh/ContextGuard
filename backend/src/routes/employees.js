@@ -1,7 +1,8 @@
 const express = require('express');
 const { pgPool } = require('../db');
 const authenticateJWT = require('../middleware/auth');
-const {logAudit, AuditLog} = require('../services/auditLogger');
+const { logAudit } = require('../services/auditLogger');
+const policyEngine = require('../services/policyEngine');
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ router.get('/', authenticateJWT, async (req, res) => {
   }
 });
 
-// Get salary info for a specific employee (highly protected)
+// Get salary info for a specific employee (context-aware policy protected)
 router.get('/:id/salary', authenticateJWT, async (req, res) => {
   const { id } = req.params;
   try {
@@ -35,26 +36,25 @@ router.get('/:id/salary', authenticateJWT, async (req, res) => {
       await logAudit(logData);
       return res.status(404).json({ error: 'Employee not found' });
     }
-    // In the future, add context-aware policy checks here!
+    // Context-aware policy check
+    const context = {
+      timestamp: new Date(),
+      ip: req.ip
+    };
+    const purpose = req.body && req.body.purpose ? req.body.purpose : null;
+    const policyDecision = await policyEngine.evaluateAccess(req.user, 'employee_salary', context, purpose);
+    if (!policyDecision.allowed) {
+      logData.result = 'denied';
+      logData.reason = policyDecision.reason || 'Policy denied';
+      await logAudit(logData);
+      return res.status(403).json({ error: 'Access denied', reason: policyDecision.reason });
+    }
     logData.result = 'allowed';
-    logData.reason = 'role allowed';
+    logData.reason = `Policy: ${policyDecision.policy}`;
     await logAudit(logData);
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch salary info', details: err.message });
-  }
-});
-
-// View audit logs (admin only)
-router.get('/api/audit-logs', authenticateJWT, async (req, res) => {
-  if (!req.user || req.user.role !== 'Admin') {
-    return res.status(403).json({ error: 'Forbidden: Admins only' });
-  }
-  try {
-    const logs = await AuditLog.find().sort({ timestamp: -1 }).limit(100);
-    res.json(logs);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch audit logs', details: err.message });
   }
 });
 
