@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 class ApiService {
   constructor() {
@@ -7,10 +7,10 @@ class ApiService {
 
   // Helper method to get auth headers
   getAuthHeaders() {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     return {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` })
+      "Content-Type": "application/json",
+      ...(token && { Authorization: `Bearer ${token}` }),
     };
   }
 
@@ -18,7 +18,9 @@ class ApiService {
   async handleResponse(response) {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      throw new Error(
+        errorData.message || `HTTP error! status: ${response.status}`
+      );
     }
     return response.json();
   }
@@ -27,26 +29,26 @@ class ApiService {
   async login(username, password) {
     try {
       const response = await fetch(`${this.baseURL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
       });
       return await this.handleResponse(response);
     } catch (error) {
-      throw new Error('Login failed. Please check your credentials.');
+      throw new Error("Login failed. Please check your credentials.");
     }
   }
 
   async register(userData) {
     try {
       const response = await fetch(`${this.baseURL}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userData)
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(userData),
       });
       return await this.handleResponse(response);
     } catch (error) {
-      throw new Error('Registration failed. Please try again.');
+      throw new Error("Registration failed. Please try again.");
     }
   }
 
@@ -54,24 +56,52 @@ class ApiService {
   async getEmployees() {
     try {
       const response = await fetch(`${this.baseURL}/api/employees`, {
-        headers: this.getAuthHeaders()
+        headers: this.getAuthHeaders(),
       });
       return await this.handleResponse(response);
     } catch (error) {
-      throw new Error('Failed to fetch employees.');
+      throw new Error("Failed to fetch employees.");
     }
   }
 
   async getEmployeeSalary(id, purpose = null) {
     try {
-      const response = await fetch(`${this.baseURL}/api/employees/${id}/salary`, {
-        method: 'POST',
+      const response = await fetch(
+        `${this.baseURL}/api/employees/${id}/salary`,
+        {
+          method: "POST",
+          headers: this.getAuthHeaders(),
+          body: JSON.stringify({ purpose }),
+        }
+      );
+      return await this.handleResponse(response);
+    } catch (error) {
+      throw new Error("Failed to fetch salary information.");
+    }
+  }
+
+  async updateEmployee(id, employeeData) {
+    try {
+      const response = await fetch(`${this.baseURL}/api/employees/${id}`, {
+        method: "PUT",
         headers: this.getAuthHeaders(),
-        body: JSON.stringify({ purpose })
+        body: JSON.stringify(employeeData),
       });
       return await this.handleResponse(response);
     } catch (error) {
-      throw new Error('Failed to fetch salary information.');
+      throw new Error("Failed to update employee.");
+    }
+  }
+
+  async deleteEmployee(id) {
+    try {
+      const response = await fetch(`${this.baseURL}/api/employees/${id}`, {
+        method: "DELETE",
+        headers: this.getAuthHeaders(),
+      });
+      return await this.handleResponse(response);
+    } catch (error) {
+      throw new Error("Failed to delete employee.");
     }
   }
 
@@ -79,61 +109,84 @@ class ApiService {
   async getPolicies() {
     try {
       const response = await fetch(`${this.baseURL}/api/policies`, {
-        headers: this.getAuthHeaders()
+        headers: this.getAuthHeaders(),
       });
       return await this.handleResponse(response);
     } catch (error) {
-      throw new Error('Failed to fetch policies.');
+      throw new Error("Failed to fetch policies.");
     }
   }
 
   async createPolicy(policyData) {
     try {
       const response = await fetch(`${this.baseURL}/api/policies`, {
-        method: 'POST',
+        method: "POST",
         headers: this.getAuthHeaders(),
-        body: JSON.stringify(policyData)
+        body: JSON.stringify(policyData),
       });
       return await this.handleResponse(response);
     } catch (error) {
-      throw new Error('Failed to create policy.');
+      throw new Error("Failed to create policy.");
     }
   }
 
   async updatePolicy(id, policyData) {
     try {
       const response = await fetch(`${this.baseURL}/api/policies/${id}`, {
-        method: 'PUT',
+        method: "PUT",
         headers: this.getAuthHeaders(),
-        body: JSON.stringify(policyData)
+        body: JSON.stringify(policyData),
       });
       return await this.handleResponse(response);
     } catch (error) {
-      throw new Error('Failed to update policy.');
+      throw new Error("Failed to update policy.");
     }
   }
 
   async deletePolicy(id) {
     try {
       const response = await fetch(`${this.baseURL}/api/policies/${id}`, {
-        method: 'DELETE',
-        headers: this.getAuthHeaders()
+        method: "DELETE",
+        headers: this.getAuthHeaders(),
       });
       return await this.handleResponse(response);
     } catch (error) {
-      throw new Error('Failed to delete policy.');
+      throw new Error("Failed to delete policy.");
     }
   }
 
   // Audit Logs (Admin only)
-  async getAuditLogs() {
+  async getAuditLogs(filters = {}) {
     try {
-      const response = await fetch(`${this.baseURL}/api/audit-logs`, {
-        headers: this.getAuthHeaders()
+      const queryParams = new URLSearchParams(filters).toString();
+      const url = queryParams
+        ? `${this.baseURL}/api/audit-logs?${queryParams}`
+        : `${this.baseURL}/api/audit-logs`;
+
+      const response = await fetch(url, {
+        headers: this.getAuthHeaders(),
+      });
+      const data = await this.handleResponse(response);
+      // Return logs array from pagination response
+      return data.logs || data;
+    } catch (error) {
+      throw new Error("Failed to fetch audit logs.");
+    }
+  }
+
+  async exportAuditLogs(filters = {}) {
+    try {
+      const queryParams = new URLSearchParams(filters).toString();
+      const url = queryParams
+        ? `${this.baseURL}/api/audit-logs/export?${queryParams}`
+        : `${this.baseURL}/api/audit-logs/export`;
+
+      const response = await fetch(url, {
+        headers: this.getAuthHeaders(),
       });
       return await this.handleResponse(response);
     } catch (error) {
-      throw new Error('Failed to fetch audit logs.');
+      throw new Error("Failed to export audit logs.");
     }
   }
 
@@ -143,9 +196,9 @@ class ApiService {
       const response = await fetch(`${this.baseURL}/api/health`);
       return await this.handleResponse(response);
     } catch (error) {
-      throw new Error('Backend is not available.');
+      throw new Error("Backend is not available.");
     }
   }
 }
 
-export default new ApiService(); 
+export default new ApiService();

@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: Dhruva@2004
+      POSTGRES_PASSWORD: SGowda@2004
       POSTGRES_DB: contextguard
     ports:
       - "5432:5432"

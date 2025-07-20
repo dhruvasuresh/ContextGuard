@@ -1,94 +1,196 @@
-const express = require('express');
-const Policy = require('../models/Policy');
-const authenticateJWT = require('../middleware/auth');
+const express = require("express");
+const Policy = require("../models/Policy");
+const authenticateJWT = require("../middleware/auth");
+const { logAudit } = require("../services/auditLogger");
 
 const router = express.Router();
 
-// Admin-only middleware
-function requireAdmin(req, res, next) {
-  if (!req.user || req.user.role !== 'Admin') {
-    return res.status(403).json({ error: 'Forbidden: Admins only' });
-  }
-  next();
-}
-
-// Get all policies (admin only)
-router.get('/', authenticateJWT, requireAdmin, async (req, res) => {
+// Get all policies (Admin only)
+router.get("/", authenticateJWT, async (req, res) => {
   try {
-    const policies = await Policy.find().sort({ policy_id: 1 });
+    // Check if user is admin
+    if (req.user.role !== "Admin") {
+      return res
+        .status(403)
+        .json({ error: "Access denied. Admin role required." });
+    }
+
+    const policies = await Policy.find({}).sort({ resource: 1, policy_id: 1 });
     res.json(policies);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch policies', details: err.message });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch policies", details: err.message });
   }
 });
 
-// Get a specific policy by ID (admin only)
-router.get('/:id', authenticateJWT, requireAdmin, async (req, res) => {
+// Get individual policy by ID (Admin only)
+router.get("/:id", authenticateJWT, async (req, res) => {
   try {
-    const policy = await Policy.findOne({ policy_id: req.params.id });
-    if (!policy) {
-      return res.status(404).json({ error: 'Policy not found' });
+    // Check if user is admin
+    if (req.user.role !== "Admin") {
+      return res
+        .status(403)
+        .json({ error: "Access denied. Admin role required." });
     }
+
+    const { id } = req.params;
+    const policy = await Policy.findOne({ policy_id: id });
+
+    if (!policy) {
+      return res.status(404).json({ error: "Policy not found" });
+    }
+
     res.json(policy);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch policy', details: err.message });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch policy", details: err.message });
   }
 });
 
-// Create a new policy (admin only)
-router.post('/', authenticateJWT, requireAdmin, async (req, res) => {
+// Create new policy (Admin only)
+router.post("/", authenticateJWT, async (req, res) => {
   try {
-    const { policy_id, name, allow_if, resource, sensitivity } = req.body;
-    if (!policy_id || !name || !allow_if || !resource) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    // Check if user is admin
+    if (req.user.role !== "Admin") {
+      return res
+        .status(403)
+        .json({ error: "Access denied. Admin role required." });
     }
+
+    const { policy_id, name, resource, sensitivity, allow_if } = req.body;
+
+    // Validate required fields
+    if (!policy_id || !name || !resource || !allow_if) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Check if policy already exists
     const existingPolicy = await Policy.findOne({ policy_id });
     if (existingPolicy) {
-      return res.status(409).json({ error: 'Policy ID already exists' });
+      return res
+        .status(409)
+        .json({ error: "Policy with this ID already exists" });
     }
-    const newPolicy = new Policy({
+
+    // Create new policy
+    const policy = new Policy({
       policy_id,
       name,
-      allow_if,
       resource,
-      sensitivity
+      sensitivity,
+      allow_if,
     });
-    await newPolicy.save();
-    res.status(201).json(newPolicy);
+
+    await policy.save();
+
+    // Log the action
+    await logAudit({
+      user_id: req.user.id,
+      action: "create_policy",
+      resource: `policy:${policy_id}`,
+      result: "success",
+      reason: `Created policy: ${name}`,
+      ip_address: req.ip,
+    });
+
+    res.status(201).json(policy);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to create policy', details: err.message });
+    res
+      .status(500)
+      .json({ error: "Failed to create policy", details: err.message });
   }
 });
 
-// Update a policy (admin only)
-router.put('/:id', authenticateJWT, requireAdmin, async (req, res) => {
+// Update policy (Admin only)
+router.put("/:id", authenticateJWT, async (req, res) => {
   try {
-    const { name, allow_if, resource, sensitivity } = req.body;
-    const updatedPolicy = await Policy.findOneAndUpdate(
-      { policy_id: req.params.id },
-      { name, allow_if, resource, sensitivity },
+    // Check if user is admin
+    if (req.user.role !== "Admin") {
+      return res
+        .status(403)
+        .json({ error: "Access denied. Admin role required." });
+    }
+
+    const { id } = req.params;
+    const updateData = req.body;
+
+    const policy = await Policy.findOneAndUpdate(
+      { policy_id: id },
+      updateData,
       { new: true, runValidators: true }
     );
-    if (!updatedPolicy) {
-      return res.status(404).json({ error: 'Policy not found' });
+
+    if (!policy) {
+      return res.status(404).json({ error: "Policy not found" });
     }
-    res.json(updatedPolicy);
+
+    // Log the action
+    await logAudit({
+      user_id: req.user.id,
+      action: "update_policy",
+      resource: `policy:${id}`,
+      result: "success",
+      reason: `Updated policy: ${policy.name}`,
+      ip_address: req.ip,
+    });
+
+    res.json(policy);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update policy', details: err.message });
+    res
+      .status(500)
+      .json({ error: "Failed to update policy", details: err.message });
   }
 });
 
-// Delete a policy (admin only)
-router.delete('/:id', authenticateJWT, requireAdmin, async (req, res) => {
+// Delete policy (Admin only)
+router.delete("/:id", authenticateJWT, async (req, res) => {
   try {
-    const deletedPolicy = await Policy.findOneAndDelete({ policy_id: req.params.id });
-    if (!deletedPolicy) {
-      return res.status(404).json({ error: 'Policy not found' });
+    // Check if user is admin
+    if (req.user.role !== "Admin") {
+      return res
+        .status(403)
+        .json({ error: "Access denied. Admin role required." });
     }
-    res.json({ message: 'Policy deleted successfully' });
+
+    const { id } = req.params;
+
+    const policy = await Policy.findOneAndDelete({ policy_id: id });
+
+    if (!policy) {
+      return res.status(404).json({ error: "Policy not found" });
+    }
+
+    // Log the action
+    await logAudit({
+      user_id: req.user.id,
+      action: "delete_policy",
+      resource: `policy:${id}`,
+      result: "success",
+      reason: `Deleted policy: ${policy.name}`,
+      ip_address: req.ip,
+    });
+
+    res.json({ message: "Policy deleted successfully" });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to delete policy', details: err.message });
+    res
+      .status(500)
+      .json({ error: "Failed to delete policy", details: err.message });
   }
 });
 
-module.exports = router; 
+// Get policies by resource
+router.get("/resource/:resource", authenticateJWT, async (req, res) => {
+  try {
+    const { resource } = req.params;
+    const policies = await Policy.find({ resource }).sort({ policy_id: 1 });
+    res.json(policies);
+  } catch (err) {
+    res
+      .status(500)
+      .json({ error: "Failed to fetch policies", details: err.message });
+  }
+});
+
+module.exports = router;
